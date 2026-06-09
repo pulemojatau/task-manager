@@ -25,13 +25,16 @@ public class TaskController {
         return taskService.createTask(request);
     }
 
-    // Get my tasks
-   @GetMapping
+    //Get tasks
+@GetMapping
 public List<TaskResponse> getMyTasks(
         @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "5") int size
+        @RequestParam(defaultValue = "5") int size,
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "createdAt") String sortBy,
+        @RequestParam(defaultValue = "DESC") String direction
 ) {
-    return taskService.getMyTasks(page, size);
+    return taskService.getMyTasks(page, size, status, sortBy, direction);
 }
 
     @PutMapping("/{taskId}")

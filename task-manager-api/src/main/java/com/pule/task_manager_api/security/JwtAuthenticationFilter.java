@@ -1,25 +1,31 @@
 package com.pule.task_manager_api.security;
 
+import com.pule.task_manager_api.entity.User;
+import com.pule.task_manager_api.repository.UserRepository;
 import com.pule.task_manager_api.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -43,11 +49,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (jwtService.isTokenValid(token, email)) {
 
+                    User user = userRepository.findByEmail(email)
+                            .orElseThrow(() -> new RuntimeException("User not found"));
+
+                    List<GrantedAuthority> authorities = List.of(
+                            new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
+                    );
+
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                     email,
                                     null,
-                                    Collections.emptyList()
+                                    authorities
                             );
 
                     SecurityContextHolder.getContext().setAuthentication(authToken);
@@ -63,6 +76,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/api/auth/");
+        return path.startsWith("/api/auth/")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs");
     }
 }
