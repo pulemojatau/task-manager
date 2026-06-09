@@ -8,6 +8,7 @@ import com.pule.task_manager_api.dto.RegisterRequest;
 import com.pule.task_manager_api.dto.UserResponse;
 import com.pule.task_manager_api.dto.LoginRequest;
 import com.pule.task_manager_api.dto.AuthResponse;
+import com.pule.task_manager_api.entity.Role;
 
 @Service
 public class UserService {
@@ -41,6 +42,9 @@ public UserResponse registerUser(RegisterRequest request) {
 
     // Hash password
     user.setPassword(passwordEncoder.encode(request.getPassword()));
+    
+    //set user role(Default=User)
+    user.setRole(Role.USER);
 
     User savedUser = userRepository.save(user);
 

@@ -7,13 +7,15 @@ import com.pule.task_manager_api.entity.Task;
 import com.pule.task_manager_api.entity.User;
 import com.pule.task_manager_api.repository.TaskRepository;
 import com.pule.task_manager_api.repository.UserRepository;
+import com.pule.task_manager_api.security.SecurityUtil;
 
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
+
+import org.springframework.data.domain.Sort;
 
 @Service
 public class TaskService {
@@ -26,15 +28,15 @@ public class TaskService {
         this.userRepository = userRepository;
     }
 
-    // Create task
+    // Create task — assigns the logged-in user as the task creator
  
 
 public TaskResponse createTask(CreateTaskRequest request) {
 
-    String email = SecurityContextHolder.getContext()
-            .getAuthentication()
-            .getName();
+    // Get the email of the currently authenticated user from our SecurityUtil helper
+    String email = SecurityUtil.getCurrentUserEmail();
 
+    // Look up the full User entity from the database using the email
     User creator = userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -61,19 +63,40 @@ public TaskResponse createTask(CreateTaskRequest request) {
     return mapToResponse(savedTask);
 }
 
-public List<TaskResponse> getMyTasks(int page, int size) {
+// Get tasks belonging to the currently logged-in user (with pagination, filtering, sorting)
+public List<TaskResponse> getMyTasks(
+        int page,
+        int size,
+        String status,
+        String sortBy,
+        String direction
+) {
 
-    String email = SecurityContextHolder.getContext()
-            .getAuthentication()
-            .getName();
+    // 1. Get logged-in user's email using SecurityUtil helper
+    String email = SecurityUtil.getCurrentUserEmail();
 
+    // 2. Look up the full User entity from the database
     User user = userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
-    Pageable pageable = PageRequest.of(page, size);
+    // 2. Create Sort object
+    Sort sort = direction.equalsIgnoreCase("ASC")
+            ? Sort.by(sortBy).ascending()
+            : Sort.by(sortBy).descending();
 
-    Page<Task> tasksPage = taskRepository.findByCreatedBy(user, pageable);
+    // 3. Create pageable WITH sorting
+    Pageable pageable = PageRequest.of(page, size, sort);
 
+    Page<Task> tasksPage;
+
+    // 4. Filtering logic
+    if (status != null && !status.isEmpty()) {
+        tasksPage = taskRepository.findByCreatedByAndStatus(user, status, pageable);
+    } else {
+        tasksPage = taskRepository.findByCreatedBy(user, pageable);
+    }
+
+    // 5. Convert to DTOs
     return tasksPage.stream()
             .map(this::mapToResponse)
             .toList();
@@ -104,22 +127,21 @@ private TaskResponse mapToResponse(Task task) {
     return response;
 }
 
+// Update a task — only the user who created it can update it
 public TaskResponse updateTask(Long taskId, UpdateTaskRequest request) {
 
-    // Get logged-in user email
-    String email = SecurityContextHolder.getContext()
-            .getAuthentication()
-            .getName();
+    // Get the currently authenticated user's email via SecurityUtil helper
+    String email = SecurityUtil.getCurrentUserEmail();
 
-    // Find logged-in user
+    // Find the logged-in user in the database
     User user = userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
-    // Find task
+    // Find the task to update
     Task task = taskRepository.findById(taskId)
             .orElseThrow(() -> new RuntimeException("Task not found"));
 
-    // 🔐 Authorization check
+    // 🔐 Authorization check — only the creator can update their own task
     if (!task.getCreatedBy().getId().equals(user.getId())) {
         throw new RuntimeException("You are not allowed to update this task");
     }
@@ -135,19 +157,21 @@ public TaskResponse updateTask(Long taskId, UpdateTaskRequest request) {
     return mapToResponse(updatedTask);
 }
 
+// Delete a task — only the user who created it can delete it
 public void deleteTask(Long taskId) {
 
-    String email = SecurityContextHolder.getContext()
-            .getAuthentication()
-            .getName();
+    // Get the currently authenticated user's email via SecurityUtil helper
+    String email = SecurityUtil.getCurrentUserEmail();
 
+    // Find the logged-in user in the database
     User user = userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
+    // Find the task to delete
     Task task = taskRepository.findById(taskId)
             .orElseThrow(() -> new RuntimeException("Task not found"));
 
-    // Authorization check
+    // 🔐 Authorization check — only the creator can delete their own task
     if (!task.getCreatedBy().getId().equals(user.getId())) {
         throw new RuntimeException("You are not allowed to delete this task");
     }
